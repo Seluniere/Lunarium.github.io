@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Stone Match Prototype — Click & Place</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe-particle-system-component@1.0.1/dist/aframe-particle-system-component.min.js"></script>
+
+  <style>
+    body { margin: 0; background: #000; font-family: Arial, sans-serif; color: #fff; }
+    .download-instructions {
+      position: fixed; right: 12px; top: 12px; background: rgba(0,0,0,0.55); padding:10px 12px; border-radius:8px;
+      font-size:13px; line-height:1.25; max-width:320px;
+    }
+  </style>
+
+  <script>
+  AFRAME.registerComponent('stone-game', {
+    init: function () {
+      this.matches = {};
+      const scene = this.el;
+      scene.addEventListener('stone-placed', (evt) => {
+        const stone = evt.detail.stone;
+        const type = stone.getAttribute('data-stone') || 'A';
+        if (!this.matches[type]) this.matches[type] = [];
+        this.matches[type].push(stone);
+        this.matches[type] = Array.from(new Set(this.matches[type]));
+        if (this.matches[type].length === 4) {
+          this.handleMatch(type);
+        }
+      });
+    },
+
+    handleMatch: function(type) {
+      const matched = this.matches[type] || [];
+      matched.forEach((stone) => {
+        const pos = stone.getAttribute('position') || {x:0,y:1,z:0};
+        const p = document.createElement('a-entity');
+        p.setAttribute('position', `${pos.x} ${pos.y + 0.12} ${pos.z}`);
+        p.setAttribute('particle-system', `preset: dust; particleCount: 420; size: 0.04; color: #ffffff, #ffd9ff; duration: 900`);
+        this.el.appendChild(p);
+        stone.setAttribute('animation__shrink', 'property: scale; to: 0 0 0; dur: 420; easing: easeInOutQuad');
+        setTimeout(() => { if (stone.parentNode) stone.parentNode.removeChild(stone); }, 520);
+        setTimeout(() => { if (p.parentNode) p.parentNode.removeChild(p); }, 1400);
+      });
+
+      const win = this.el.querySelector(`#window-${type}`);
+      if (win) {
+        win.setAttribute('scale', '0 0 0');
+        win.setAttribute('visible', 'true');
+        win.setAttribute('animation__open', 'property: scale; to: 1 1 1; dur: 680; easing: easeOutElastic');
+      }
+
+      this.matches[type] = [];
+    }
+  });
+
+  AFRAME.registerComponent('pickable', {
+    init: function () {
+      this.el.classList.add('clickable');
+      this.el.setAttribute('tabindex', '0');
+      this.el.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        if (this.el.getAttribute('data-placed') === 'true') return;
+        const scene = this.el.sceneEl;
+        if (scene.pickedStone === this.el) {
+          this.el.setAttribute('scale', '1 1 1');
+          scene.pickedStone = null;
+        } else {
+          if (scene.pickedStone) scene.pickedStone.setAttribute('scale', '1 1 1');
+          scene.pickedStone = this.el;
+          this.el.setAttribute('scale', '1.18 1.18 1.18');
+        }
+      });
+    }
+  });
+
+  AFRAME.registerComponent('stone-slot', {
+    schema: { acceptType: { type: 'string', default: '' } },
+    init: function () {
+      this.el.classList.add('clickable');
+      this.el.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        const scene = this.el.sceneEl;
+        const stone = scene.pickedStone;
+        if (!stone) {
+          this.el.setAttribute('animation__flash', 'property: scale; to: 1.05 1.02 1.05; dur: 120; dir: alternate; loop: 1; easing: easeOutQuad');
+          return;
+        }
+        const stoneType = stone.getAttribute('data-stone') || '';
+        if (this.data.acceptType && this.data.acceptType !== stoneType) {
+          const orig = stone.getAttribute('position');
+          stone.setAttribute('animation__reject', `property: position; to: ${orig.x} ${orig.y + 0.12} ${orig.z}; dur: 240; easing: easeOutBounce`);
+          return;
+        }
+        const slotPos = this.el.getAttribute('position');
+        stone.setAttribute('position', `${slotPos.x} ${slotPos.y + 0.08} ${slotPos.z}`);
+        stone.setAttribute('rotation', '0 0 0');
+        stone.setAttribute('scale', '1 1 1');
+        stone.setAttribute('data-placed', 'true');
+        scene.pickedStone = null;
+        stone.setAttribute('animation__pop', 'property: scale; to: 1.12 1.12 1.12; dur: 120; dir: alternate; easing: easeOutQuad; loop: 1');
+        scene.emit('stone-placed', { stone: stone, slot: this.el }, false);
+      });
+    }
+  });
+
+  AFRAME.registerComponent('resettable', {
+    init: function () {
+      const btn = document.getElementById('resetBtn');
+      if (!btn) return;
+      btn.addEventListener('click', () => { window.location.reload(); });
+    }
+  });
+
+  </script>
+</head>
+<body>
+  <div class="download-instructions">
+    Tip: click a stone to select it, then click a table slot to place it. Match 4 identical stones to open a window.<br><br>
+    <div style="margin-top:8px"><button id="resetBtn">Reset</button></div>
+  </div>
+
+  <a-scene stone-game resettable background="color: #05020b">
+    <a-assets>
+      <img id="view-A" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="600"><rect width="100%" height="100%" fill="%23fce4ff"/><text x="50%" y="50%" font-size="56" text-anchor="middle" fill="%23003366" font-family="Arial">Window A</text></svg>'>
+      <img id="view-B" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="600"><rect width="100%" height="100%" fill="%23fff7d6"/><text x="50%" y="50%" font-size="56" text-anchor="middle" fill="%23330033" font-family="Arial">Window B</text></svg>'>
+      <img id="view-C" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="600"><rect width="100%" height="100%" fill="%2300ffcc"/><text x="50%" y="50%" font-size="56" text-anchor="middle" fill="%23003333" font-family="Arial">Window C</text></svg>'>
+      <img id="view-D" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="600"><rect width="100%" height="100%" fill="%23ffeeff"/><text x="50%" y="50%" font-size="56" text-anchor="middle" fill="%23002244" font-family="Arial">Window D</text></svg>'>
+    </a-assets>
+
+    <a-entity id="cameraRig" position="0 1.6 3">
+      <a-entity camera look-controls>
+        <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable" position="0 0 -1"></a-entity>
+      </a-entity>
+    </a-entity>
+
+    <a-entity position="0 0 -2">
+      <a-ring radius-inner="1" radius-outer="1.9" rotation="-90 0 0" color="#f8f0ff" opacity="0.12"></a-ring>
+      <a-light type="ambient" color="#ffffff" intensity="0.6"></a-light>
+      <a-light type="point" position="0 2 -1.5" intensity="0.9" distance="6"></a-light>
+    </a-entity>
+
+    <a-entity position="0 1.02 -1.5">
+      <a-box depth="1.2" width="1.6" height="0.06" color="#2b2b33"></a-box>
+      <a-cylinder class="slot" stone-slot position="-0.6 0.05 0.12" radius="0.09" height="0.02" color="#222"></a-cylinder>
+      <a-cylinder class="slot" stone-slot position="-0.2 0.05 0.12" radius="0.09" height="0.02" color="#222"></a-cylinder>
+      <a-cylinder class="slot" stone-slot position="0.2 0.05 0.12" radius="0.09" height="0.02" color="#222"></a-cylinder>
+      <a-cylinder class="slot" stone-slot position="0.6 0.05 0.12" radius="0.09" height="0.02" color="#222"></a-cylinder>
+    </a-entity>
+
+    <a-sphere class="stone" pickable data-stone="A" radius="0.07" position="-1.1 1.3 -1.2" color="#7ec8ff"></a-sphere>
+    <a-sphere class="stone" pickable data-stone="A" radius="0.07" position="-0.85 1.3 -1.05" color="#7ec8ff"></a-sphere>
+    <a-sphere class="stone" pickable data-stone="A" radius="0.07" position="-0.6 1.3 -1.2" color="#7ec8ff"></a-sphere>
+    <a-sphere class="stone" pickable data-stone="A" radius="0.07" position="-0.35 1.3 -1.05" color="#7ec8ff"></a-sphere>
+
+    <a-box class="stone" pickable data-stone="B" depth="0.08" height="0.08" width="0.08" position="0.5 1.3 -1.2" color="#ffd07a"></a-box>
+    <a-box class="stone" pickable data-stone="B" depth="0.08" height="0.08" width="0.08" position="0.8 1.3 -1.05" color="#ffd07a"></a-box>
+    <a-box class="stone" pickable data-stone="B" depth="0.08" height="0.08" width="0.08" position="1.1 1.3 -1.2" color="#ffd07a"></a-box>
+    <a-box class="stone" pickable data-stone="B" depth="0.08" height="0.08" width="0.08" position="1.4 1.3 -1.05" color="#ffd07a"></a-box>
+
+    <a-cone class="stone" pickable data-stone="C" radius-bottom="0.06" height="0.12" position="-0.1 1.3 -1.5" rotation="0 45 0" color="#b4ffdd"></a-cone>
+    <a-cone class="stone" pickable data-stone="C" radius-bottom="0.06" height="0.12" position="0.2 1.3 -1.45" rotation="0 15 0" color="#b4ffdd"></a-cone>
+    <a-cone class="stone" pickable data-stone="C" radius-bottom="0.06" height="0.12" position="0.45 1.3 -1.55" rotation="0 -15 0" color="#b4ffdd"></a-cone>
+    <a-cone class="stone" pickable data-stone="C" radius-bottom="0.06" height="0.12" position="0.7 1.3 -1.45" rotation="0 -45 0" color="#b4ffdd"></a-cone>
+
+    <a-torus class="stone" pickable data-stone="D" radius="0.06" radius-tubular="0.02" position="-1.5 1.3 -1.5" rotation="0 30 0" color="#ffd9ff"></a-torus>
+    <a-torus class="stone" pickable data-stone="D" radius="0.06" radius-tubular="0.02" position="-1.2 1.3 -1.45" rotation="0 10 0" color="#ffd9ff"></a-torus>
+    <a-torus class="stone" pickable data-stone="D" radius="0.06" radius-tubular="0.02" position="-0.9 1.3 -1.5" rotation="0 -10 0" color="#ffd9ff"></a-torus>
+    <a-torus class="stone" pickable data-stone="D" radius="0.06" radius-tubular="0.02" position="-0.6 1.3 -1.45" rotation="0 -30 0" color="#ffd9ff"></a-torus>
+
+    <a-plane id="window-A" visible="false" position="-1.8 1 -3.5" width="1.2" height="0.8" scale="0 0 0" material="shader: flat; src: #view-A"></a-plane>
+    <a-plane id="window-B" visible="false" position="-0.5 1 -3.5" width="1.2" height="0.8" scale="0 0 0" material="shader: flat; src: #view-B"></a-plane>
+    <a-plane id="window-C" visible="false" position="0.8 1 -3.5" width="1.2" height="0.8" scale="0 0 0" material="shader: flat; src: #view-C"></a-plane>
+    <a-plane id="window-D" visible="false" position="2.1 1 -3.5" width="1.2" height="0.8" scale="0 0 0" material="shader: flat; src: #view-D"></a-plane>
+
+    <a-plane rotation="-90 0 0" width="20" height="20" position="0 0 -4" color="#060612"></a-plane>
+    <a-entity position="-0.9 2.25 -1.5"><a-text value="Click a stone → click a slot. Match 4 to open a window." width="2.2" color="#ffffff" align="left"></a-text></a-entity>
+  </a-scene>
+</body>
+</html>
